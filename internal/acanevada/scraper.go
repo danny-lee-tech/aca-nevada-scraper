@@ -15,8 +15,8 @@ import (
 
 const InitialUrl string = "https://enroll.nevadahealthlink.com/prescreener/"
 
-func RetrievePlans() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+func RetrievePlans() ([]Plan, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
 	c, _ := chromedp.NewContext(ctx)
@@ -32,36 +32,36 @@ func RetrievePlans() (string, error) {
 
 	planList := []Plan{}
 
-	count, err := countPlansOnPage(&c)
+	count, err := getTotalNumberOfPlans(&c)
 	if err != nil {
-		return "", err
-	}
-	fmt.Println(count)
-
-	for i := 1; i <= count; i++ {
-		plan := Plan{}
-		navigateToPlan(&c, &plan, i)
-		planList = append(planList, plan)
+		return nil, err
 	}
 
-	err = nextPage(&c)
-	if err != nil {
-		return "", err
-	}
+	totalPages := count/12 + 1
 
-	count, err = countPlansOnPage(&c)
-	if err != nil {
-		return "", err
-	}
-	for i := 1; i <= count; i++ {
-		plan := Plan{}
-		navigateToPlan(&c, &plan, i)
-		planList = append(planList, plan)
+	for page := 1; page <= totalPages; page++ {
+		planCountOnPage, err := countPlansOnPage(&c)
+		if err != nil {
+			return nil, err
+		}
+
+		for i := 1; i <= planCountOnPage; i++ {
+			plan := Plan{}
+			navigateToPlan(&c, &plan, i)
+			planList = append(planList, plan)
+		}
+
+		if page < totalPages {
+			err = nextPage(&c)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	takeScreenshot(&c)
 
-	return "", nil
+	return planList, nil
 }
 
 func takeScreenshot(c *context.Context) error {
@@ -81,6 +81,23 @@ func takeScreenshot(c *context.Context) error {
 	return nil
 }
 
+func getTotalNumberOfPlans(c *context.Context) (int, error) {
+	var countStr string
+	err := chromedp.Run(*c,
+		chromedp.TextContent(`#filteredPlanCount`, &countStr, chromedp.ByQuery),
+	)
+	if err != nil {
+		return 0, nil
+	}
+
+	count, err := strconv.Atoi(countStr)
+
+	if err != nil {
+		return 0, nil
+	}
+	return count, nil
+}
+
 func countPlansOnPage(c *context.Context) (int, error) {
 	var nodes []*cdp.Node
 	err := chromedp.Run(*c,
@@ -90,7 +107,6 @@ func countPlansOnPage(c *context.Context) (int, error) {
 		return 0, err
 	}
 	count := len(nodes)
-	fmt.Println(strconv.Itoa(count) + " plans on page")
 
 	return count, nil
 }
@@ -108,9 +124,9 @@ func navigateToPlanList(c *context.Context) error {
 		chromedp.Click(`button[data-testid="btn-next"]`),
 		chromedp.WaitVisible(`input[id="skipButton"]`),
 		chromedp.Click(`input[id="skipButton"]`),
-		chromedp.WaitVisible(`input[id="filter_checkbox_BRONZE"]`),
+		chromedp.WaitVisible(`input[id="premiumAfterCredit"]`),
 		chromedp.Click(`input[id="premiumAfterCredit"]`),
-		chromedp.Click(`input[id="filter_checkbox_BRONZE"]`),
+		//chromedp.Click(`input[id="filter_checkbox_BRONZE"]`),
 		chromedp.Sleep(2*time.Second),
 	)
 	if err != nil {
@@ -133,6 +149,9 @@ func navigateToPlan(c *context.Context, plan *Plan, index int) error {
 	fmt.Println("Setting fields for Plan " + strconv.Itoa(index))
 
 	setName(c, plan)
+	setCompanyAndNetwork(c, plan)
+	setTierAndTypes(c, plan)
+	setPremiumMonthly(c, plan)
 
 	setDeductible(c, plan)
 	setOutOfPocketMax(c, plan)
@@ -161,7 +180,6 @@ func navigateToPlan(c *context.Context, plan *Plan, index int) error {
 	setInpatientHospitalServices(c, plan)
 	setInpatientPhysician(c, plan)
 
-	fmt.Println(plan.name)
 	fmt.Println("Going back to list of plans")
 
 	err = chromedp.Run(*c,
@@ -190,6 +208,64 @@ func nextPage(c *context.Context) error {
 
 func setName(c *context.Context, plan *Plan) error {
 	return setTextSimple(c, &plan.name, `.ps-detail__highlights-table tbody tr:nth-child(1) td`)
+}
+
+func setCompanyAndNetwork(c *context.Context, plan *Plan) error {
+	err := setTextSimple(c, &plan.network, `tr > td.cp-tile__value a:not([role])`)
+	if err != nil {
+		return err
+	}
+
+	switch plan.network {
+	case "NVBBSP", "Premier":
+		plan.company = "Ambetter"
+	case "Anthem Battle Born with RX Choice Tiered Network", "Pathway X - HMO, Dental Prime, and Rx Choice Tiered Network", "HMO and Rx Choice Tiered Network", "Anthem Battle Born with Pharmacy Base Network":
+		plan.company = "Anthem"
+	case "HPN Ind On Ex BBSP Select", "HPN Ind On Exchange":
+		plan.company = "Health Plan of Nevada"
+	case "Imperial Value":
+		plan.company = "Imperial Insurance Companies"
+	case "Med Network", "Value Network":
+		plan.company = "Select Health"
+	case "Nevada":
+		plan.company = "CareSource"
+	case "Molina Healthcare of Nevada,Inc.":
+		plan.company = "Molina"
+	}
+
+	return nil
+}
+
+func setPremiumMonthly(c *context.Context, plan *Plan) error {
+	return setTextSimple(c, &plan.premiumMonthly, `.cp-tile__premium-amount`)
+}
+
+func setTierAndTypes(c *context.Context, plan *Plan) error {
+	var bannerString string
+	err := setTextSimple(c, &bannerString, `div.cp-tile__metal-tier`)
+	if err != nil {
+		return err
+	}
+
+	if strings.Contains(bannerString, "Bronze") {
+		plan.tier = "Bronze"
+	} else if strings.Contains(bannerString, "Silver") {
+		plan.tier = "Silver"
+	} else if strings.Contains(bannerString, "Gold") {
+		plan.tier = "Gold"
+	}
+
+	if strings.Contains(bannerString, "HSA") {
+		plan.isHsa = true
+	}
+
+	if strings.Contains(bannerString, "HMO") {
+		plan.planType = "HMO"
+	} else if strings.Contains(bannerString, "EPO") {
+		plan.planType = "EPO"
+	}
+
+	return nil
 }
 
 func setDeductible(c *context.Context, plan *Plan) error {
