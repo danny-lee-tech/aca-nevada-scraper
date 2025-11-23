@@ -40,9 +40,11 @@ func RetrievePlans() ([]Plan, error) {
 	totalPages := count/12 + 1
 
 	for page := 1; page <= totalPages; page++ {
-		err := nextPage(&c)
-		if err != nil {
-			return nil, err
+		if page > 1 {
+			err := nextPage(&c)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		planCountOnPage, err := countPlansOnPage(&c)
@@ -130,6 +132,7 @@ func navigateToPlanList(c *context.Context) error {
 		chromedp.WaitVisible(`input[id="premiumAfterCredit"]`),
 		chromedp.Click(`input[id="premiumAfterCredit"]`),
 		//chromedp.Click(`input[id="filter_checkbox_BRONZE"]`),
+		//chromedp.Click(`input[id="filter_checkbox_SILVER"]`),
 		chromedp.Sleep(2*time.Second),
 	)
 	if err != nil {
