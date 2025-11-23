@@ -40,6 +40,11 @@ func RetrievePlans() ([]Plan, error) {
 	totalPages := count/12 + 1
 
 	for page := 1; page <= totalPages; page++ {
+		err := nextPage(&c)
+		if err != nil {
+			return nil, err
+		}
+
 		planCountOnPage, err := countPlansOnPage(&c)
 		if err != nil {
 			return nil, err
@@ -49,10 +54,8 @@ func RetrievePlans() ([]Plan, error) {
 			plan := Plan{}
 			navigateToPlan(&c, &plan, i)
 			planList = append(planList, plan)
-		}
 
-		if page < totalPages {
-			err = nextPage(&c)
+			err := goToPage(&c, page)
 			if err != nil {
 				return nil, err
 			}
@@ -185,7 +188,7 @@ func navigateToPlan(c *context.Context, plan *Plan, index int) error {
 	err = chromedp.Run(*c,
 		chromedp.Click(`a.back-to-all-plans-link-detail`, chromedp.ByQuery),
 		chromedp.WaitVisible(`#mainSummary > div:nth-child(`+strconv.Itoa(index)+` of .cp-tile) .cp-tile__body > a`),
-		chromedp.Sleep(1*time.Second),
+		chromedp.Sleep(1*time.Second/10),
 	)
 	if err != nil {
 		return err
@@ -197,11 +200,25 @@ func navigateToPlan(c *context.Context, plan *Plan, index int) error {
 func nextPage(c *context.Context) error {
 	err := chromedp.Run(*c,
 		chromedp.Click(`.cp-pagination__btn--right`, chromedp.ByQuery),
-		chromedp.Sleep(1*time.Second),
+		chromedp.Sleep(1*time.Second/10),
+		chromedp.Evaluate(`window.scrollTo(0, document.body.scrollHeight)`, nil),
 	)
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func goToPage(c *context.Context, page int) error {
+	for i := 1; i < page; i++ {
+		err := nextPage(c)
+		if err != nil {
+			return err
+		}
+	}
+
+	takeScreenshot(c)
 
 	return nil
 }
@@ -219,9 +236,9 @@ func setCompanyAndNetwork(c *context.Context, plan *Plan) error {
 	switch plan.network {
 	case "NVBBSP", "Premier":
 		plan.company = "Ambetter"
-	case "Anthem Battle Born with RX Choice Tiered Network", "Pathway X - HMO, Dental Prime, and Rx Choice Tiered Network", "HMO and Rx Choice Tiered Network", "Anthem Battle Born with Pharmacy Base Network":
+	case "Anthem Battle Born with RX Choice Tiered Network", "HMO and Rx Choice Tiered Network", "Anthem Battle Born with Pharmacy Base Network", "Pathway X - HMO Dental Prime and Rx Choice Tiered Network":
 		plan.company = "Anthem"
-	case "HPN Ind On Ex BBSP Select", "HPN Ind On Exchange":
+	case "HPN Ind On Ex BBSP Select", "HPN Ind On Exchange", "HPN Ind On Exchange Select":
 		plan.company = "Health Plan of Nevada"
 	case "Imperial Value":
 		plan.company = "Imperial Insurance Companies"
@@ -229,7 +246,7 @@ func setCompanyAndNetwork(c *context.Context, plan *Plan) error {
 		plan.company = "Select Health"
 	case "Nevada":
 		plan.company = "CareSource"
-	case "Molina Healthcare of Nevada,Inc.":
+	case "Molina Healthcare of Nevada Inc.":
 		plan.company = "Molina"
 	}
 
@@ -253,6 +270,8 @@ func setTierAndTypes(c *context.Context, plan *Plan) error {
 		plan.tier = "Silver"
 	} else if strings.Contains(bannerString, "Gold") {
 		plan.tier = "Gold"
+	} else if strings.Contains(bannerString, "Catastrophic") {
+		plan.tier = "Catastrophic (Age < 30)"
 	}
 
 	if strings.Contains(bannerString, "HSA") {
@@ -354,6 +373,8 @@ func setTextSimple(c *context.Context, field *string, cssSelector string) error 
 	)
 
 	*field = strings.TrimSpace(*field)
+	*field = strings.ReplaceAll(*field, ",", " ")
+	*field = strings.ReplaceAll(*field, "  ", " ")
 
 	if err != nil {
 		return err
@@ -378,6 +399,8 @@ func setTextRemoveDivSibling(c *context.Context, field *string, cssSelector stri
 	}
 
 	*field = strings.TrimSpace(*field)
+	*field = strings.ReplaceAll(*field, ",", " ")
+	*field = strings.ReplaceAll(*field, "  ", " ")
 
 	return nil
 }
