@@ -121,7 +121,7 @@ func navigateToPlanList(c *context.Context) error {
 		chromedp.Navigate(InitialUrl),
 		chromedp.SendKeys(`input[data-testid="zip-code-input"]`, "89118", chromedp.ByQuery),
 		chromedp.SendKeys(`input[id="household-member-0-birthdate-picker"]`, "01012005", chromedp.ByQuery),
-		chromedp.SendKeys(`input[data-testid="household-income-input"]`, "65000", chromedp.ByQuery),
+		chromedp.SendKeys(`input[data-testid="household-income-input"]`, "31300", chromedp.ByQuery),
 		chromedp.Click("body"),
 		chromedp.Sleep(2*time.Second),
 		chromedp.Click(`button[data-testid="btn-see-savings"]`),
@@ -132,7 +132,7 @@ func navigateToPlanList(c *context.Context) error {
 		chromedp.WaitVisible(`input[id="premiumAfterCredit"]`),
 		chromedp.Click(`input[id="premiumAfterCredit"]`),
 		//chromedp.Click(`input[id="filter_checkbox_BRONZE"]`),
-		//chromedp.Click(`input[id="filter_checkbox_SILVER"]`),
+		chromedp.Click(`input[id="filter_checkbox_SILVER"]`),
 		chromedp.Sleep(2*time.Second),
 	)
 	if err != nil {
