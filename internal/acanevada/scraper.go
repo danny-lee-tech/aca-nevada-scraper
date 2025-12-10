@@ -359,7 +359,7 @@ func setEmergencyTransport(c *context.Context, plan *Plan) error {
 }
 
 func setUrgentCare(c *context.Context, plan *Plan) error {
-	return setTextRemoveDivSibling(c, &plan.urgentCare, "#urgent2Detail > div:nth-child(1 of .details)")
+	return setTextRemoveDivSibling(c, &plan.urgentCare, "#urgent3Detail > div:nth-child(1 of .details)")
 }
 
 func setInpatientHospitalServices(c *context.Context, plan *Plan) error {
